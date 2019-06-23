@@ -21,19 +21,18 @@ namespace RestAPI.DAL
             {
                 // First, check to see whether anyone is listening on the DynamoDB local port
                 // (by default, this is port 8000, so if you are using a different port, modify this accordingly)
-                var localFound = false;
                 try
                 {
                     using (var tcpClient = new TcpClient())
                     {
                         var result = tcpClient.BeginConnect("localhost", 8000, null, null);
-                        localFound = result.AsyncWaitHandle.WaitOne(3000); // Wait 3 seconds
+                        result.AsyncWaitHandle.WaitOne(3000); // Wait 3 seconds
                         tcpClient.EndConnect(result);
                     }
                 }
                 catch
                 {
-                    localFound = false;
+                    //Do nothing
                 }
 
                 // If DynamoDB-Local does seem to be running, so create a DynamoClient
@@ -46,7 +45,7 @@ namespace RestAPI.DAL
                 {
                     DynamoClient = new AmazonDynamoDBClient(ddbConfig);
                 }
-                catch (Exception ex)
+                catch
                 {
                     //FAILED to create a DynamoDBLocal DynamoClient
                     
@@ -61,7 +60,7 @@ namespace RestAPI.DAL
                     DynamoClient = new AmazonDynamoDBClient(new AppConfigAWSCredentials(), RegionEndpoint.EUCentral1);
 
                 }
-                catch (Exception ex)
+                catch
                 {
                     throw new Exception("Failed to create database client.");
                 }
@@ -83,7 +82,7 @@ namespace RestAPI.DAL
                     //Deleted Existing Table...
                 }
             }
-            catch (Exception ex)
+            catch
             {
                 throw new Exception("Require collection not exists. Please try after a while");
             }
@@ -112,14 +111,11 @@ namespace RestAPI.DAL
 
                 itemBatch.Execute();
             }
-            catch (ResourceNotFoundException ex)
+            catch
             {
                 throw new Exception("Require collection not exists. Please try after a while");
             }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
+         
         }
 
         /// <summary>
@@ -127,6 +123,7 @@ namespace RestAPI.DAL
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="key"></param>
+        /// <param name="range"></param>
         /// <returns></returns>
         public T GetItem<T>(int key, long range) where T : class
         {
@@ -147,7 +144,7 @@ namespace RestAPI.DAL
             {
                 return;
             }
-             //Creating a new table
+            //Creating a new table
 
             CreateNewTable(newTableName,
                 tableAttributes,
@@ -164,15 +161,8 @@ namespace RestAPI.DAL
         {
             try
             {
-                DescribeTableResponse result = DynamoClient.DescribeTable(tableName);
-                if (result != null && result.Table != null && result.Table.TableStatus == TableStatus.ACTIVE)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
+                var result = DynamoClient.DescribeTable(tableName);
+                return result?.Table != null && result.Table.TableStatus == TableStatus.ACTIVE;
             }
             catch 
             {
@@ -183,12 +173,7 @@ namespace RestAPI.DAL
         {
             
             var tblResponse = DynamoClient.ListTables();
-            if (tblResponse.TableNames.Contains(tableName))
-            {
-                //  A table named {tableName} already exists in DynamoDB!
-                return true;
-            }
-            return false;
+            return tblResponse.TableNames.Contains(tableName);
         }
 
 
@@ -200,10 +185,8 @@ namespace RestAPI.DAL
             List<KeySchemaElement> tableKeySchema,
             ProvisionedThroughput provisionedThroughput)
         {
-            CreateTableRequest request;
-
             // Build the 'CreateTableRequest' structure for the new table
-            request = new CreateTableRequest
+            var request = new CreateTableRequest
             {
                 TableName = tableName,
                 AttributeDefinitions = tableAttributes,
@@ -216,10 +199,10 @@ namespace RestAPI.DAL
            
             try
             {
-                var makeTbl = DynamoClient.CreateTable(request);
+                DynamoClient.CreateTable(request);
                 //Created the {tableName} table successfully!
             }
-            catch(Exception ex)
+            catch
             {
                 // FAILED to create the new table, because: {0}.", ex.Message);
 

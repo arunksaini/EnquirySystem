@@ -11,7 +11,7 @@ namespace RestAPI.DAL
     public class DynamoDb : IDal
     {
         public Client Client;
-        object lockObj = new object();
+        private readonly object _lockObj = new object();
         public DynamoDb()
         {
             Client = new Client(false);
@@ -34,16 +34,27 @@ namespace RestAPI.DAL
             return true;
         }
 
-        void WaitForTableCreation(string tableName)
+        private void WaitForTableCreation(string tableName)
         {
-
-            int tryCount = 0;
-            while (!Client.CheckingTableExistence(tableName) && !Client.CheckTableIsReady(tableName)  && tryCount < 10)
+            while (!Client.CheckingTableExistence(tableName) && !Client.CheckTableIsReady(tableName))
             {
-                tryCount++;
-                System.Threading.Thread.Sleep(5000);
+                System.Threading.Thread.Sleep(1000);
             } 
 
+        }
+
+        private void WaitForTableDeletion()
+        {
+
+            while (Client.CheckingTableExistence(EntityType.Product.ToString())
+                   ||
+                   Client.CheckingTableExistence(EntityType.Order.ToString())
+                   ||
+                   Client.CheckingTableExistence(EntityType.Invoice.ToString())
+            )
+            {
+                System.Threading.Thread.Sleep(1000);
+            }
         }
 
         public void ClearEntities()
@@ -51,6 +62,10 @@ namespace RestAPI.DAL
             Client.DeleteEntities(EntityType.Product);
             Client.DeleteEntities(EntityType.Order);
             Client.DeleteEntities(EntityType.Invoice);
+
+            WaitForTableDeletion();
+
+            CreateTables();
         }
         public Common.Entity QueryEntity(EntityType type, int id, long timeStamp)
         {
@@ -80,6 +95,8 @@ namespace RestAPI.DAL
                     }
 
                     break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(type), type, "Common.Entity type not supported");
             }
 
             return entity;
@@ -92,15 +109,12 @@ namespace RestAPI.DAL
 
         private void CreateTables()
         {
-            lock (lockObj)
+            lock (_lockObj)
             {
                 CreateTable(EntityType.Product);
                 CreateTable(EntityType.Invoice);
                 CreateTable(EntityType.Order);
             }
-            
-
-
         }
 
         private void CreateTable(EntityType table)
@@ -109,8 +123,8 @@ namespace RestAPI.DAL
             var tableName = table.ToString();
 
             // key names for the table
-            var partitionKeyName = "Id";
-            var sortKeyName = "TimeStamp";
+            const string partitionKeyName = "Id";
+            const string sortKeyName = "TimeStamp";
 
             // items_attributes
             var itemsAttributes
@@ -155,58 +169,22 @@ namespace RestAPI.DAL
                 tableProvisionedThroughput);
         }
 
-        private IList<Product> ConvertEntityToProduct(IList<Common.Entity> entities)
+        private static IEnumerable<Product> ConvertEntityToProduct(IEnumerable<Common.Entity> entities)
         {
-            IList<Product> list = new List<Product>();
-            Product item;
-
-            foreach (var entity in entities)
-            {
-                item = new Product();
-                item.Id = entity.Id;
-                item.TimeStamp = entity.TimeStamp;
-                item.Changes = JsonConvert.SerializeObject(entity.Changes);
-                list.Add(item);
-            }
-
-            return list;
+            return entities.Select(entity => new Product {Id = entity.Id, TimeStamp = entity.TimeStamp, Changes = JsonConvert.SerializeObject(entity.Changes)}).ToList();
         }
 
-        private IList<Invoice> ConvertEntityToInvoice(IList<Common.Entity> entities)
+        private static IEnumerable<Invoice> ConvertEntityToInvoice(IEnumerable<Common.Entity> entities)
         {
-            IList<Invoice> list = new List<Invoice>();
-            Invoice item;
-
-            foreach (var entity in entities)
-            {
-                item = new Invoice();
-                item.Id = entity.Id;
-                item.TimeStamp = entity.TimeStamp;
-                item.Changes = JsonConvert.SerializeObject(entity.Changes);
-                list.Add(item);
-            }
-
-            return list;
+            return entities.Select(entity => new Invoice {Id = entity.Id, TimeStamp = entity.TimeStamp, Changes = JsonConvert.SerializeObject(entity.Changes)}).ToList();
         }
 
-        private IList<Order> ConvertEntityToOrder(IList<Common.Entity> entities)
+        private static IEnumerable<Order> ConvertEntityToOrder(IEnumerable<Common.Entity> entities)
         {
-            IList<Order> list = new List<Order>();
-            Order item;
-
-            foreach (var entity in entities)
-            {
-                item = new Order();
-                item.Id = entity.Id;
-                item.TimeStamp = entity.TimeStamp;
-                item.Changes = JsonConvert.SerializeObject(entity.Changes);
-                list.Add(item);
-            }
-
-            return list;
+            return entities.Select(entity => new Order {Id = entity.Id, TimeStamp = entity.TimeStamp, Changes = JsonConvert.SerializeObject(entity.Changes)}).ToList();
         }
 
-        private Common.Entity ConvertEntityToDynamoEntity<T>(dynamic entity)
+        private static Common.Entity ConvertEntityToDynamoEntity<T>(dynamic entity)
         {
             Common.Entity item = null;
             if (entity != null)

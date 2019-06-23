@@ -6,7 +6,7 @@ namespace RestAPI.BLL
 {
     public interface IEnquiry
     {
-        bool ReadFromStream(StreamReader streamReader);
+        void  ReadFromStream(StreamReader streamReader);
         Entity ConvertCsvToEntity(string csv);
 
         bool SaveToDatabase(IList<Entity> entities);

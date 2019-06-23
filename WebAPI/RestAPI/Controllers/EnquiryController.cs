@@ -11,7 +11,7 @@ using RestAPI.Common;
 namespace RestAPI.Controllers
 {
 
-    //[EnableCors("http://localhost:3000", "*", "*")]
+    // [EnableCors("http://localhost:3000", "*", "*")]
     [EnableCors("http://enquiry-app.s3-website.eu-central-1.amazonaws.com", "*", "*")]
     public class EnquiryController : ApiController
     {
@@ -54,6 +54,7 @@ namespace RestAPI.Controllers
                     {
                         var postedFile = httpRequest.Files[file];
 
+                        if (postedFile == null) continue;
                         using (var streamReader = new StreamReader(postedFile.InputStream))
                         {
                             enquiryBll.ReadFromStream(streamReader);
@@ -81,6 +82,8 @@ namespace RestAPI.Controllers
             IHttpActionResult result;
             try
             {
+                HttpContext.Current.Server.ScriptTimeout = 300;
+
                 //TODO : use DI
                 IEnquiry enquiryBll = new Enquiry();
                 enquiryBll.ClearEntities();
